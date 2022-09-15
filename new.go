@@ -41,6 +41,10 @@ var ValidateDocFields = func(field index.Field) error {
 	return nil
 }
 
+// This flag controls the disk stats collection from the segment files
+// during indexing and querying
+var CollectDiskStats bool
+
 // New creates an in-memory zap-encoded SegmentBase from a set of Documents
 func (z *ZapPlugin) New(results []index.Document) (
 	segment.Segment, uint64, error) {
@@ -618,7 +622,9 @@ func (s *interim) writeStoredFields() (
 }
 
 func (s *interim) setBytesWritten(val uint64) {
-	atomic.StoreUint64(&s.bytesWritten, val)
+	if CollectDiskStats {
+		atomic.StoreUint64(&s.bytesWritten, val)
+	}
 }
 
 func (s *interim) writeDicts() (fdvIndexOffset uint64, dictOffsets []uint64, err error) {

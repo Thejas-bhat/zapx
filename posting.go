@@ -209,17 +209,22 @@ func (p *PostingsList) iterator(includeFreq, includeNorm, includeLocs bool,
 		return rv
 	}
 
+	var readerBytesRead uint64
 	// initialize freq chunk reader
 	if rv.includeFreqNorm {
-		rv.freqNormReader = newChunkedIntDecoder(p.sb.mem, p.freqOffset, rv.freqNormReader)
-		rv.incrementBytesRead(rv.freqNormReader.getBytesRead())
+		rv.freqNormReader, readerBytesRead = newChunkedIntDecoder(p.sb.mem, p.freqOffset, rv.freqNormReader)
+		// rv.incrementBytesRead(rv.freqNormReader.getBytesRead())
 	}
 
 	// initialize the loc chunk reader
 	if rv.includeLocs {
-		rv.locReader = newChunkedIntDecoder(p.sb.mem, p.locOffset, rv.locReader)
-		rv.incrementBytesRead(rv.locReader.getBytesRead())
+		locReader, bytesRead := newChunkedIntDecoder(p.sb.mem, p.locOffset, rv.locReader)
+		// rv.incrementBytesRead(rv.locReader.getBytesRead())
+		rv.locReader = locReader
+		readerBytesRead += bytesRead
 	}
+
+	rv.incrementBytesRead(readerBytesRead)
 
 	rv.all = p.postings.Iterator()
 	if p.except != nil {
@@ -255,7 +260,9 @@ func (p *PostingsList) Count() uint64 {
 // the bytes read from the postings lists stored
 // on disk, while querying
 func (p *PostingsList) ResetBytesRead(val uint64) {
-	atomic.StoreUint64(&p.bytesRead, val)
+	if CollectDiskStats {
+		atomic.StoreUint64(&p.bytesRead, val)
+	}
 }
 
 func (p *PostingsList) BytesRead() uint64 {
@@ -263,7 +270,9 @@ func (p *PostingsList) BytesRead() uint64 {
 }
 
 func (p *PostingsList) incrementBytesRead(val uint64) {
-	atomic.AddUint64(&p.bytesRead, val)
+	if CollectDiskStats {
+		atomic.AddUint64(&p.bytesRead, val)
+	}
 }
 
 func (p *PostingsList) BytesWritten() uint64 {
@@ -368,15 +377,19 @@ func (i *PostingsIterator) Size() int {
 // the freqNorm and location specific information
 // of a hit
 func (i *PostingsIterator) ResetBytesRead(val uint64) {
-	atomic.StoreUint64(&i.bytesRead, val)
+	if CollectDiskStats {
+		i.bytesRead = val
+	}
 }
 
 func (i *PostingsIterator) BytesRead() uint64 {
-	return atomic.LoadUint64(&i.bytesRead)
+	return i.bytesRead
 }
 
 func (i *PostingsIterator) incrementBytesRead(val uint64) {
-	atomic.AddUint64(&i.bytesRead, val)
+	if CollectDiskStats {
+		i.bytesRead += val
+	}
 }
 
 func (i *PostingsIterator) BytesWritten() uint64 {
@@ -384,8 +397,9 @@ func (i *PostingsIterator) BytesWritten() uint64 {
 }
 
 func (i *PostingsIterator) loadChunk(chunk int) error {
+	var totalChunkBytesRead uint64
 	if i.includeFreqNorm {
-		err := i.freqNormReader.loadChunk(chunk)
+		err, bytesRead := i.freqNormReader.loadChunk(chunk)
 		if err != nil {
 			return err
 		}
@@ -394,16 +408,21 @@ func (i *PostingsIterator) loadChunk(chunk int) error {
 		// the postingsIterator is tracking only the chunk loaded
 		// and the cumulation is tracked correctly in the downstream
 		// intDecoder
-		i.ResetBytesRead(i.freqNormReader.getBytesRead())
+		// i.ResetBytesRead(i.freqNormReader.getBytesRead())
+		totalChunkBytesRead += bytesRead
+
 	}
 
 	if i.includeLocs {
-		err := i.locReader.loadChunk(chunk)
+		err, bytesRead := i.locReader.loadChunk(chunk)
 		if err != nil {
 			return err
 		}
-		i.ResetBytesRead(i.locReader.getBytesRead())
+		// i.ResetBytesRead(i.locReader.getBytesRead())
+		totalChunkBytesRead += bytesRead
 	}
+
+	i.incrementBytesRead(totalChunkBytesRead)
 
 	i.currChunk = uint32(chunk)
 	return nil

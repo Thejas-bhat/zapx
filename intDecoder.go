@@ -33,7 +33,7 @@ type chunkedIntDecoder struct {
 }
 
 // newChunkedIntDecoder expects an optional or reset chunkedIntDecoder for better reuse.
-func newChunkedIntDecoder(buf []byte, offset uint64, rv *chunkedIntDecoder) *chunkedIntDecoder {
+func newChunkedIntDecoder(buf []byte, offset uint64, rv *chunkedIntDecoder) (*chunkedIntDecoder, uint64) {
 	if rv == nil {
 		rv = &chunkedIntDecoder{startOffset: offset, data: buf}
 	} else {
@@ -59,9 +59,11 @@ func newChunkedIntDecoder(buf []byte, offset uint64, rv *chunkedIntDecoder) *chu
 		rv.chunkOffsets[i], read = binary.Uvarint(buf[offset+n : offset+n+binary.MaxVarintLen64])
 		n += uint64(read)
 	}
-	atomic.AddUint64(&rv.bytesRead, n)
+	if CollectDiskStats {
+		atomic.AddUint64(&rv.bytesRead, n)
+	}
 	rv.dataStartOffset = offset + n
-	return rv
+	return rv, n
 }
 
 // A util function which fetches the query time
@@ -73,15 +75,15 @@ func (d *chunkedIntDecoder) getBytesRead() uint64 {
 	return atomic.LoadUint64(&d.bytesRead)
 }
 
-func (d *chunkedIntDecoder) loadChunk(chunk int) error {
+func (d *chunkedIntDecoder) loadChunk(chunk int) (error, uint64) {
 	if d.startOffset == termNotEncoded {
 		d.r = newMemUvarintReader([]byte(nil))
-		return nil
+		return nil, 0
 	}
 
 	if chunk >= len(d.chunkOffsets) {
 		return fmt.Errorf("tried to load freq chunk that doesn't exist %d/(%d)",
-			chunk, len(d.chunkOffsets))
+			chunk, len(d.chunkOffsets)), 0
 	}
 
 	end, start := d.dataStartOffset, d.dataStartOffset
@@ -89,14 +91,16 @@ func (d *chunkedIntDecoder) loadChunk(chunk int) error {
 	start += s
 	end += e
 	d.curChunkBytes = d.data[start:end]
-	atomic.AddUint64(&d.bytesRead, uint64(len(d.curChunkBytes)))
+	// if CollectDiskStats {
+	// 	atomic.AddUint64(&d.bytesRead, uint64(len(d.curChunkBytes)))
+	// }
 	if d.r == nil {
 		d.r = newMemUvarintReader(d.curChunkBytes)
 	} else {
 		d.r.Reset(d.curChunkBytes)
 	}
 
-	return nil
+	return nil, end - start
 }
 
 func (d *chunkedIntDecoder) reset() {
