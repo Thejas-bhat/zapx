@@ -470,13 +470,28 @@ func (s *SegmentBase) Count() uint64 {
 	return s.numDocs
 }
 
+type DocIDDictionary struct {
+	size    uint64
+	docNums *roaring.Bitmap
+}
+
+func (d *DocIDDictionary) Size() uint64 {
+	return d.size
+}
+
+func (d *DocIDDictionary) DocNumbers() *roaring.Bitmap {
+	return d.docNums
+}
+
 // DocNumbers returns a bitset corresponding to the doc numbers of all the
 // provided _id strings
-func (s *SegmentBase) DocNumbers(ids []string) (*roaring.Bitmap, error) {
-	rv := roaring.New()
-
+func (s *SegmentBase) DocNumbers(ids []string) (segment.DocIDDictionary, error) {
+	rv := &DocIDDictionary{}
+	postings := roaring.New()
+	var idDict *Dictionary
 	if len(s.fieldsMap) > 0 {
-		idDict, err := s.dictionary("_id")
+		var err error
+		idDict, err = s.dictionary("_id")
 		if err != nil {
 			return nil, err
 		}
@@ -500,10 +515,14 @@ func (s *SegmentBase) DocNumbers(ids []string) (*roaring.Bitmap, error) {
 			if err != nil {
 				return nil, err
 			}
-			postingsList.OrInto(rv)
+			postingsList.OrInto(postings)
 		}
 	}
 
+	rv.docNums = postings
+	if idDict != nil {
+		rv.size = idDict.BytesRead()
+	}
 	return rv, nil
 }
 
