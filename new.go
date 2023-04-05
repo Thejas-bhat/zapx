@@ -17,6 +17,7 @@ package zap
 import (
 	"bytes"
 	"encoding/binary"
+	"log"
 	"math"
 	"sort"
 	"sync"
@@ -646,6 +647,9 @@ func (s *interim) writeDicts() (fdvIndexOffset uint64, dictOffsets []uint64, err
 			chunkSize, err := getChunkSize(s.chunkMode, postingsBS.GetCardinality(), uint64(len(s.results)))
 			if err != nil {
 				return 0, nil, err
+			}
+			if chunkSize == 0 {
+				log.Printf("chunk size is 0 while indexing for field: %s, term: %s numDocs: %v", s.FieldsInv[fieldID], string(term), len(s.results))
 			}
 			tfEncoder.SetChunkSize(chunkSize, uint64(len(s.results)-1))
 			locEncoder.SetChunkSize(chunkSize, uint64(len(s.results)-1))

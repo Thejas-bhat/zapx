@@ -17,6 +17,7 @@ package zap
 import (
 	"encoding/binary"
 	"fmt"
+	"log"
 	"math"
 	"reflect"
 
@@ -273,6 +274,12 @@ func (rv *PostingsList) read(postingsOffset uint64, d *Dictionary) error {
 	}
 	_, err := rv.postings.FromBuffer(roaringBytes)
 	if err != nil {
+		if postingsLen < 4 {
+			log.Printf("debug: the postingsLen is 0, this should not happen %s, "+
+				"postingsLen %v, postingsOffset: %v, memLen: %v, numDocs %v", d.field, postingsLen, postingsOffset,
+				len(d.sb.mem), d.sb.numDocs)
+		}
+
 		return fmt.Errorf("error loading roaring bitmap: %v", err)
 	}
 
@@ -280,6 +287,11 @@ func (rv *PostingsList) read(postingsOffset uint64, d *Dictionary) error {
 		rv.postings.GetCardinality(), d.sb.numDocs)
 	if err != nil {
 		return err
+	}
+
+	if rv.chunkSize == 0 {
+		log.Printf("debug: the chunksize is 0, this should not happen %s", d.field)
+		return fmt.Errorf("the chunksize is 0, which is not expected behaviour")
 	}
 
 	return nil

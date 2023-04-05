@@ -16,6 +16,7 @@ package zap
 
 import (
 	"fmt"
+	"log"
 )
 
 // LegacyChunkMode was the original chunk mode (always chunk size 1024)
@@ -61,6 +62,9 @@ func getChunkSize(chunkMode uint32, cardinality uint64, maxDocs uint64) (uint64,
 		// 2.  convert to chunkSize, dividing into maxDocs
 		numChunks := (cardinality / 1024) + 1
 		chunkSize := maxDocs / numChunks
+		if chunkSize == 0 {
+			log.Printf("chunking: numChunks: %d, maxDocs: %d, cardinality: %d", numChunks, maxDocs, cardinality)
+		}
 		return chunkSize, nil
 	}
 	return 0, fmt.Errorf("unknown chunk mode %d", chunkMode)
