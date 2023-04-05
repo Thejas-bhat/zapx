@@ -16,6 +16,7 @@ package zap
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/RoaringBitmap/roaring"
 	index "github.com/blevesearch/bleve_index_api"
@@ -56,6 +57,9 @@ func (d *Dictionary) postingsList(term []byte, except *roaring.Bitmap, rv *Posti
 
 	postingsOffset, exists, err := d.fstReader.Get(term)
 	if err != nil {
+		if d.field != "_id" {
+			log.Printf("postingsList: term: %s field: %s", string(term), string(d.field))
+		}
 		return nil, fmt.Errorf("vellum err: %v", err)
 	}
 	if !exists {
